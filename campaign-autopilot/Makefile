@@ -12,13 +12,14 @@ dev-agent:
 	@echo "TODO: start the FastAPI agent in apps/agent."
 
 seed:
-	@echo "TODO: load Brew & Bloom seed data."
+	python data/seed/generate_seed.py
+	python scripts/seed_db.py
 
 demo:
 	@echo "TODO: run the simulated creative-fatigue demo."
 
 test:
-	@echo "TODO: run tests once implementations exist; no tests run by this stub."
+	python -m pytest
 
 reset:
 	@echo "TODO: reset the local demo database; no data is changed by this stub."

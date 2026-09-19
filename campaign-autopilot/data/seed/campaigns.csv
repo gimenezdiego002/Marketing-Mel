@@ -1,0 +1,5 @@
+external_id,name,platform,objective,status,daily_budget
+meta_prospecting,Meta Prospecting,meta,acquisition,active,450
+meta_retargeting,Meta Retargeting,meta,conversion,active,120
+google_brand_search,Google Brand Search,google,conversion,active,80
+klaviyo_welcome_flow,Klaviyo Welcome Flow,klaviyo,retention,active,0

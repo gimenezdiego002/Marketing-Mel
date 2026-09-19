@@ -1,0 +1,37 @@
+# Python environment for deterministic analytics and the Supabase seed loader.
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "campaign-autopilot-agent"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "httpx>=0.28,<1",
+  "openai>=1.109,<3",
+  "pandas>=2.2,<4",
+  "pydantic>=2.10,<3",
+  "python-dotenv>=1.0,<2",
+  "supabase>=2.15,<3",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+
+[tool.setuptools]
+packages = ["analytics", "connectors", "guardrails", "llm"]
+
+[tool.setuptools.package-dir]
+analytics = "apps/agent/analytics"
+connectors = "apps/agent/connectors"
+guardrails = "apps/agent/guardrails"
+llm = "apps/agent/llm"
+
+[tool.setuptools.package-data]
+llm = ["prompts/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["apps/agent/tests"]
+pythonpath = ["apps/agent"]
+addopts = "-q"

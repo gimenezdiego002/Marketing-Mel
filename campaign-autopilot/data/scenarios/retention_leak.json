@@ -1,0 +1,5 @@
+{
+  "description": "Acquisition remains healthy while repeat purchase share and lifecycle-email engagement weaken.",
+  "campaign_external_id": "klaviyo_welcome_flow",
+  "overrides": {"ending_email_click_rate": 0.022, "repeat_order_rate": 0.12}
+}

@@ -1,0 +1,5 @@
+{
+  "description": "Prospecting creative saturates after day 18: CTR decays and CPM/frequency rise while landing-page CVR stays flat.",
+  "campaign_external_id": "meta_prospecting",
+  "overrides": {"change_day": 19, "ending_ctr": 0.0136, "ending_cpm": 13.6, "ending_frequency": 3.8, "cvr": 0.028}
+}

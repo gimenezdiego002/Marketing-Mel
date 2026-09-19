@@ -1,0 +1,5 @@
+{
+  "description": "Traffic quality and auction cost stay stable while post-click conversion declines, pointing to the landing page or offer.",
+  "campaign_external_id": "meta_prospecting",
+  "overrides": {"change_day": 19, "ending_ctr": 0.020, "ending_cpm": 11.0, "ending_frequency": 2.4, "ending_cvr": 0.016}
+}
