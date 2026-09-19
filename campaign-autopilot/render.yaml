@@ -1,0 +1,20 @@
+# Render blueprint for the agent service.
+# The agent keeps the LangGraph checkpointer in memory, so it needs a always-on
+# process rather than serverless functions. One free instance is enough for the demo.
+services:
+  - type: web
+    name: journey-edge-agent
+    runtime: python
+    plan: free
+    rootDir: campaign-autopilot
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m uvicorn main:app --app-dir apps/agent --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.8"
+      - key: SIMULATION_MODE
+        value: "true"
+      # Set this to the deployed dashboard URL, e.g. https://journey-edge.vercel.app
+      - key: WEB_ORIGIN
+        sync: false

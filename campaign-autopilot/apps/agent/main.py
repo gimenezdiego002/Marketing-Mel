@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
@@ -11,11 +12,16 @@ from pydantic import BaseModel, Field
 from demo_runtime import runtime
 
 
+# Set WEB_ORIGIN to the deployed dashboard URL (comma-separated for more than one).
+# The regex additionally covers any local Vite port and Vercel preview deployments.
+ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("WEB_ORIGIN", "").split(",") if origin.strip()]
+ORIGIN_PATTERN = r"http://(127\.0\.0\.1|localhost):\d+|https://[\w.-]+\.vercel\.app"
+
 app = FastAPI(title="Journey Edge agent API", version="0.2.0")
-# Any local Vite port is allowed so a 5173 fallback (5174, 5175, ...) still reaches the agent.
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"http://(127\.0\.0\.1|localhost):\d+",
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=ORIGIN_PATTERN,
     allow_methods=["*"], allow_headers=["*"],
 )
 

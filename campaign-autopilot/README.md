@@ -98,6 +98,35 @@ and `policy.decide`, so setting **Autonomy level** to *Recommend only*, or raisi
 confidence** above 0.90, makes the loop stop at a recommendation and never reach the approval
 gate or the connector. `apps/agent/tests/test_graph.py` covers each of those branches.
 
+## Deploying
+
+The dashboard is a static Vite build and the agent is a stateful process, so they deploy
+to different places. The agent keeps its LangGraph checkpointer in memory, which means it
+needs an always-on process — on serverless functions, Run agent and Approve can land on
+different instances and the approval fails.
+
+**Agent → Render** (`render.yaml` is a blueprint; New → Blueprint, point it at this repo):
+
+| Setting | Value |
+| --- | --- |
+| Root directory | `campaign-autopilot` |
+| Build command | `pip install -r requirements.txt` |
+| Start command | `python -m uvicorn main:app --app-dir apps/agent --host 0.0.0.0 --port $PORT` |
+| Health check | `/health` |
+| Env | `WEB_ORIGIN` = your Vercel URL |
+
+**Dashboard → Vercel** (`apps/web/vercel.json` holds the build config):
+
+| Setting | Value |
+| --- | --- |
+| Root directory | `campaign-autopilot/apps/web` |
+| Env | `VITE_AGENT_URL` = your Render URL, e.g. `https://journey-edge-agent.onrender.com` |
+
+`VITE_AGENT_URL` is read at build time, so redeploy the dashboard after changing it. The agent
+already accepts any `*.vercel.app` origin, so preview deployments work without extra config.
+Render's free tier sleeps after inactivity — open the agent's `/health` once before presenting
+so the first click is not waiting on a cold start.
+
 ## Web ↔ agent contract
 
 The dashboard talks to the FastAPI agent directly over HTTP; there is no Next.js server or
