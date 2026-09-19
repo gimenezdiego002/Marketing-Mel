@@ -26,6 +26,7 @@ The system follows four operating rules:
 ```text
 campaign-autopilot/
   apps/web/               React and Vite dashboard
+  apps/agent/graph.py     The loop as one LangGraph graph, with two human-in-the-loop pauses
   apps/agent/             FastAPI, analytics, connectors, guardrails, and LLM layer
   supabase/migrations/    PostgreSQL schema
   data/seed/              Deterministic campaign, order, and recovery fixtures
@@ -65,6 +66,10 @@ make dev-web
 
 Open `http://localhost:5173`. Click **Run agent**, open the detected issue, approve the creative, then open **Experiments** and click **Simulate next week**.
 
+**Trends** and **Organic** are read-only views that work without running the agent: Trends charts
+thirty days of daily spend against attributed revenue, and Organic splits Shopify revenue into
+campaign-attributed and unattributed orders. Both read the same seeded fixtures as the loop.
+
 Reset and rehearse the terminal workflow with:
 
 ```powershell
@@ -74,6 +79,24 @@ make test
 ```
 
 On Windows, GNU Make is often installed as `mingw32-make` (for example with MSYS2); substitute that name, or run the commands from `Makefile` directly. The complete three-minute presentation is in `docs/demo-script.md`.
+
+## The loop
+
+`apps/agent/graph.py` builds the ten nodes as one LangGraph `StateGraph`:
+
+```text
+ingest → analyze → detect → diagnose → plan → generate → approve → act → measure → learn
+```
+
+Two nodes are real LangGraph interrupts rather than UI state. `approve` pauses until a human
+decides on the creative, and `measure` pauses until the next week of data arrives — which is
+exactly what the **Run agent**, **Approve creative**, and **Simulate next week** buttons resume.
+`GET /api/graph` returns the node list and how far the current thread has walked it.
+
+Branching is driven by the guardrails, not by the demo script. `plan` runs `spend_caps.check`
+and `policy.decide`, so setting **Autonomy level** to *Recommend only*, or raising **Minimum
+confidence** above 0.90, makes the loop stop at a recommendation and never reach the approval
+gate or the connector. `apps/agent/tests/test_graph.py` covers each of those branches.
 
 ## Web ↔ agent contract
 

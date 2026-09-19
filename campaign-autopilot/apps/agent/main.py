@@ -66,6 +66,22 @@ def campaigns() -> list[dict[str, Any]]:
     return runtime.campaign_metrics()
 
 
+@app.get("/api/trends")
+def trends() -> dict[str, Any]:
+    return runtime.trends()
+
+
+@app.get("/api/organic")
+def organic() -> dict[str, Any]:
+    return runtime.organic()
+
+
+@app.get("/api/graph")
+def graph() -> dict[str, Any]:
+    """Expose the LangGraph node list and how far the current thread has walked it."""
+    return runtime.graph_view()
+
+
 @app.post("/api/agent/run")
 @app.post("/run")
 def run_agent() -> dict[str, Any]:

@@ -34,6 +34,14 @@ try {
   const rows = await page.locator('tbody tr').count()
   if (rows !== 4) throw new Error(`Campaigns table rendered ${rows} rows, expected 4`)
 
+  await page.getByRole('button', { name: 'Trends' }).click()
+  await page.getByRole('heading', { name: 'Direction of travel' }).waitFor()
+  await page.getByRole('cell', { name: 'Meta Prospecting' }).waitFor()
+
+  await page.getByRole('button', { name: 'Organic' }).click()
+  await page.getByRole('heading', { name: 'Where revenue came from' }).waitFor()
+  await page.getByRole('cell', { name: 'Organic / direct' }).waitFor()
+
   await page.getByRole('button', { name: 'Chat' }).click()
   await page.getByRole('button', { name: /ask/i }).click()
   await page.getByText(/creative fatigue: CTR/i).waitFor()
@@ -43,7 +51,7 @@ try {
   await page.getByText(/guardrails saved/i).waitFor()
 
   if (errors.length) throw new Error(errors.join('\n'))
-  console.log('Browser flow passed: run -> diagnose -> approve -> simulate -> measured recovery; campaigns, chat, and guardrails verified; 0 console errors.')
+  console.log('Browser flow passed: run -> diagnose -> approve -> simulate -> measured recovery; campaigns, trends, organic, chat, and guardrails verified; 0 console errors.')
 } finally {
   await browser.close()
 }

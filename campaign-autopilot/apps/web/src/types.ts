@@ -5,6 +5,9 @@
  *
  * ENDPOINTS (base URL = VITE_AGENT_URL, default http://127.0.0.1:8000)
  *   GET    /api/state                  -> DemoState
+ *   GET    /api/trends                 -> Trends      (read-only; independent of the loop)
+ *   GET    /api/organic                -> Organic     (read-only; independent of the loop)
+ *   GET    /api/graph                  -> GraphView   (LangGraph node list and thread position)
  *   POST   /api/agent/run              -> DemoState   (ingest -> detect -> diagnose -> generate -> hold for approval)
  *   POST   /api/approvals/{action_id}  -> DemoState   body { decision: 'approved' | 'rejected' }; 404 unknown id, 400 bad decision
  *   POST   /api/simulate-week          -> DemoState   409 until an action has status 'applied'
@@ -66,3 +69,31 @@ export type DemoState = {
 }
 
 export type ChatAnswer = { answer: string; evidence_cited: string[]; limitations: string[] }
+
+/** Metrics that divide by zero come back as null rather than NaN (klaviyo has no CPA). */
+export type TrendDay = { date: string; spend: number; revenue: number; roas: number | null; ctr: number | null; cpa: number | null }
+export type TrendCampaign = {
+  id: string; name: string; channel: string; spend: number
+  /** Last seven days vs the seven before, as signed fractions. */
+  ctr_change: number | null; cpa_change: number | null; roas: number | null
+  series: { date: string; ctr: number | null; cpa: number | null }[]
+}
+export type Trends = { window: string; days: TrendDay[]; campaigns: TrendCampaign[] }
+
+export type OrganicSource = { source: string; channel: string; orders: number; revenue: number; share: number; aov: number }
+export type Organic = {
+  organic_revenue: number; organic_orders: number; attributed_revenue: number; attributed_orders: number
+  total_revenue: number
+  /** Percent, 0..100. */
+  organic_share: number; organic_repeat_rate: number
+  organic_aov: number
+  daily: { date: string; organic: number; attributed: number }[]
+  sources: OrganicSource[]
+}
+
+export type GraphView = {
+  thread_id: string; phase: string
+  nodes: { name: string; status: 'done' | 'pending' }[]
+  visited: string[]
+  interrupts: { node: string; waits_for: string }[]
+}

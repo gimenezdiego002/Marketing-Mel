@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts'
+import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Check, LockKeyhole, Send, ShieldCheck, Sparkles, X } from 'lucide-react'
-import type { Action, ChatAnswer, Experiment, Issue } from './types'
+import type { Action, ChatAnswer, Experiment, Issue, Organic, Trends } from './types'
 
 export function Status({ children }: { children: string }) {
   return <span className={`status status-${children.toLowerCase().replaceAll(' ', '-')}`}>{children}</span>
@@ -75,6 +75,49 @@ export function ChatPanel({ ask }: { ask: (message: string) => Promise<ChatAnswe
     <div className="chat-answer">{answer ? <><p>{answer.answer}</p><div className="chips">{answer.evidence_cited.map(x => <span key={x}>{x}</span>)}</div></> : <div className="empty compact">Ask about the diagnosis, spend cap, or measured result.</div>}</div>
     <div className="chat-input"><input value={message} onChange={e => setMessage(e.target.value)} onKeyDown={e => e.key === 'Enter' && void submit()}/><button className="primary" disabled={busy} onClick={() => void submit()}>{busy ? 'Thinking…' : <><Send/> Ask</>}</button></div>
   </section>
+}
+
+const shortDate = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+const dollars = (value: number) => `$${Math.round(value).toLocaleString('en-US')}`
+const axis = { stroke: '#8a9994', fontSize: 11, tickLine: false, axisLine: false }
+
+/** Signed change rendered with the same positive/negative colouring the tables use. */
+export function Delta({ value, goodWhenNegative }: { value: number | null; goodWhenNegative?: boolean }) {
+  if (value === null) return <span className="muted">—</span>
+  const good = goodWhenNegative ? value < 0 : value > 0
+  return <strong className={Math.abs(value) < 0.005 ? 'muted' : good ? 'delta-good' : 'delta-bad'}>{(value * 100).toFixed(1)}%</strong>
+}
+
+export function SpendRevenueChart({ days }: { days: Trends['days'] }) {
+  return <div className="chart"><ResponsiveContainer width="100%" height="100%">
+    <AreaChart data={days} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+      <defs>
+        <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#356f62" stopOpacity={.3}/><stop offset="1" stopColor="#356f62" stopOpacity={0}/></linearGradient>
+        <linearGradient id="spd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#d9704d" stopOpacity={.25}/><stop offset="1" stopColor="#d9704d" stopOpacity={0}/></linearGradient>
+      </defs>
+      <CartesianGrid stroke="#e7ece7" vertical={false}/>
+      <XAxis dataKey="date" tickFormatter={shortDate} minTickGap={28} {...axis}/>
+      <YAxis tickFormatter={dollars} width={58} {...axis}/>
+      <Tooltip formatter={(value, name) => [dollars(Number(value)), name === 'revenue' ? 'Revenue' : 'Spend']} labelFormatter={label => shortDate(String(label))}/>
+      <Legend formatter={value => value === 'revenue' ? 'Attributed revenue' : 'Ad spend'} iconType="plainline" wrapperStyle={{ fontSize: 12 }}/>
+      <Area type="monotone" dataKey="revenue" stroke="#356f62" strokeWidth={2.5} fill="url(#rev)" isAnimationActive={false}/>
+      <Area type="monotone" dataKey="spend" stroke="#d9704d" strokeWidth={2.5} fill="url(#spd)" isAnimationActive={false}/>
+    </AreaChart>
+  </ResponsiveContainer></div>
+}
+
+export function OrganicSplitChart({ daily }: { daily: Organic['daily'] }) {
+  return <div className="chart"><ResponsiveContainer width="100%" height="100%">
+    <AreaChart data={daily} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+      <CartesianGrid stroke="#e7ece7" vertical={false}/>
+      <XAxis dataKey="date" tickFormatter={shortDate} minTickGap={28} {...axis}/>
+      <YAxis tickFormatter={dollars} width={58} {...axis}/>
+      <Tooltip formatter={(value, name) => [dollars(Number(value)), name === 'organic' ? 'Organic / direct' : 'Campaign-attributed']} labelFormatter={label => shortDate(String(label))}/>
+      <Legend formatter={value => value === 'organic' ? 'Organic / direct' : 'Campaign-attributed'} iconType="plainline" wrapperStyle={{ fontSize: 12 }}/>
+      <Area type="monotone" dataKey="attributed" stackId="revenue" stroke="#356f62" strokeWidth={2} fill="#356f62" fillOpacity={.22} isAnimationActive={false}/>
+      <Area type="monotone" dataKey="organic" stackId="revenue" stroke="#8fbfa8" strokeWidth={2} fill="#8fbfa8" fillOpacity={.35} isAnimationActive={false}/>
+    </AreaChart>
+  </ResponsiveContainer></div>
 }
 
 export function SafetyCard() {

@@ -1,16 +1,28 @@
 import { useEffect, useState } from 'react'
-import { Activity, AlertTriangle, BarChart3, Bot, CheckCircle2, FlaskConical, Gauge, LayoutDashboard, LoaderCircle, MessageSquare, Play, RotateCcw, Settings, ShieldCheck } from 'lucide-react'
+import { Activity, AlertTriangle, BarChart3, Bot, CheckCircle2, FlaskConical, Gauge, LayoutDashboard, Leaf, LineChart, LoaderCircle, MessageSquare, Play, RotateCcw, Settings, ShieldCheck } from 'lucide-react'
 import { api } from './api'
-import { ActionProposal, BeforeAfterCard, ChatPanel, DiagnosisPanel, IssueCard, SafetyCard, Status } from './components'
+import { ActionProposal, BeforeAfterCard, ChatPanel, Delta, DiagnosisPanel, IssueCard, OrganicSplitChart, SafetyCard, SpendRevenueChart, Status } from './components'
 import { DotField, LogoCloud, Mark } from './brand'
 import type { DemoState, Guardrails, Issue } from './types'
 
-type Page = 'Overview' | 'Issues' | 'Approvals' | 'Campaigns' | 'Experiments' | 'Chat' | 'Guardrails'
+type Page = 'Overview' | 'Issues' | 'Approvals' | 'Campaigns' | 'Trends' | 'Organic' | 'Experiments' | 'Chat' | 'Guardrails'
 const nav: { page: Page; icon: typeof Activity }[] = [
   { page: 'Overview', icon: LayoutDashboard }, { page: 'Issues', icon: AlertTriangle }, { page: 'Approvals', icon: CheckCircle2 },
-  { page: 'Campaigns', icon: BarChart3 }, { page: 'Experiments', icon: FlaskConical }, { page: 'Chat', icon: MessageSquare }, { page: 'Guardrails', icon: Settings },
+  { page: 'Campaigns', icon: BarChart3 }, { page: 'Trends', icon: LineChart }, { page: 'Organic', icon: Leaf },
+  { page: 'Experiments', icon: FlaskConical }, { page: 'Chat', icon: MessageSquare }, { page: 'Guardrails', icon: Settings },
 ]
 const money = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value)
+
+/** Load a read-only view that lives outside the workflow state. */
+function useResource<T>(load: () => Promise<T>) {
+  const [data, setData] = useState<T | null>(null), [error, setError] = useState('')
+  useEffect(() => {
+    let live = true
+    load().then(value => { if (live) setData(value) }).catch(problem => { if (live) setError(problem instanceof Error ? problem.message : 'Could not load this view') })
+    return () => { live = false }
+  }, [])
+  return { data, error }
+}
 
 function Landing({ launch }: { launch: () => void }) {
   return <div className="landing"><header className="landing-header"><button className="journey-brand"><Mark size={28}/> Journey Edge</button><nav><a href="#product">Product</a><a href="#workflow">How it works</a><a href="#safety">Safety</a><button className="primary" onClick={launch}>Open live demo →</button></nav></header>
@@ -47,6 +59,43 @@ function Campaigns({ state }: { state: DemoState }) { return <><PageHeading eyeb
 
 function Experiments({ state, busy, simulate }: { state: DemoState; busy: boolean; simulate: () => void }) { const canSimulate = state.actions[0]?.status === 'applied'; return <><PageHeading eyebrow="CLOSED LOOP" title="Experiments" body="Compare the diagnosed week with the injected post-action week." action={<button className="primary" disabled={!canSimulate || busy} onClick={simulate}>{busy ? <LoaderCircle className="spin"/> : <FlaskConical/>}{busy ? 'Simulating…' : 'Simulate next week'}</button>}/>{state.experiments[0] ? <BeforeAfterCard experiment={state.experiments[0]}/> : <Empty title={canSimulate ? 'Ready to measure' : 'No experiment to measure'} body={canSimulate ? 'The creative is approved. Inject the deterministic next-week recovery data.' : 'Approve the proposed creative before simulating its result.'}/>}</> }
 
+function TrendsPage() {
+  const { data, error } = useResource(api.trends)
+  if (error) return <Empty title="Trends unavailable" body={error}/>
+  if (!data) return <Empty title="Loading trends" body="Reading thirty days of campaign snapshots."/>
+  return <><PageHeading eyebrow={`PERFORMANCE OVER TIME · ${data.window}`} title="Trends" body="Daily spend and attributed revenue, summed across all four campaigns."/>
+    <div className="page-stack">
+      <section className="panel"><div className="panel-heading"><div><h2>Spend and revenue</h2><p>Each point is one day of summed campaign snapshots</p></div></div><SpendRevenueChart days={data.days}/></section>
+      <section className="panel"><div className="panel-heading"><div><h2>Direction of travel</h2><p>Last seven days compared with the seven before</p></div></div>
+        <div className="table-wrap"><table><thead><tr><th>Campaign</th><th>Channel</th><th>30-day spend</th><th>ROAS (7d)</th><th>CTR change</th><th>CPA change</th></tr></thead>
+          <tbody>{data.campaigns.map(row => <tr key={row.id}><td><strong>{row.name}</strong></td><td>{row.channel}</td><td>{money(row.spend)}</td>
+            <td>{row.roas === null ? <span className="muted">—</span> : `${row.roas.toFixed(2)}×`}</td>
+            <td><Delta value={row.ctr_change}/></td><td><Delta value={row.cpa_change} goodWhenNegative/></td></tr>)}</tbody></table></div>
+      </section>
+    </div></>
+}
+
+function OrganicPage() {
+  const { data, error } = useResource(api.organic)
+  if (error) return <Empty title="Organic revenue unavailable" body={error}/>
+  if (!data) return <Empty title="Loading organic revenue" body="Reading the Shopify order history."/>
+  return <><PageHeading eyebrow="SHOPIFY REVENUE" title="Organic" body="Revenue from orders that carried no campaign attribution."/>
+    <section className="metrics">
+      <article><span>Organic revenue</span><strong>{money(data.organic_revenue)}</strong><small>{data.organic_orders} orders</small></article>
+      <article><span>Share of revenue</span><strong>{data.organic_share.toFixed(1)}%</strong><small>of {money(data.total_revenue)} total</small></article>
+      <article><span>Organic AOV</span><strong>${data.organic_aov.toFixed(2)}</strong><small>Average order value</small></article>
+      <article><span>Repeat customers</span><strong>{data.organic_repeat_rate.toFixed(1)}%</strong><small>of organic orders</small></article>
+    </section>
+    <div className="page-stack">
+      <section className="panel"><div className="panel-heading"><div><h2>Organic against paid</h2><p>Daily Shopify revenue split by attribution</p></div></div><OrganicSplitChart daily={data.daily}/></section>
+      <section className="panel"><div className="panel-heading"><div><h2>Where revenue came from</h2><p>Every order grouped by its UTM campaign</p></div></div>
+        <div className="table-wrap"><table><thead><tr><th>Source</th><th>Channel</th><th>Orders</th><th>Revenue</th><th>Share</th><th>AOV</th></tr></thead>
+          <tbody>{data.sources.map(row => <tr key={row.source}><td><strong>{row.source}</strong></td><td>{row.channel}</td><td>{row.orders}</td>
+            <td>{money(row.revenue)}</td><td>{row.share.toFixed(1)}%</td><td>${row.aov.toFixed(2)}</td></tr>)}</tbody></table></div>
+      </section>
+    </div></>
+}
+
 function GuardrailSettings({ state, busy, save }: { state: DemoState; busy: boolean; save: (value: Guardrails) => void }) { const [form, setForm] = useState(state.guardrails); return <><PageHeading eyebrow="SAFETY POLICY" title="Guardrails" body="These limits are enforced before actions reach a connector."/><section className="panel settings-form"><label>Maximum daily spend ($)<input type="number" value={form.max_daily_spend} onChange={e => setForm({ ...form, max_daily_spend: Number(e.target.value) })}/></label><label>Maximum reallocation (%)<input type="number" value={form.max_reallocation_pct} onChange={e => setForm({ ...form, max_reallocation_pct: Number(e.target.value) })}/></label><label>Minimum confidence<input type="number" step="0.05" value={form.min_confidence} onChange={e => setForm({ ...form, min_confidence: Number(e.target.value) })}/></label><label>Autonomy level<select value={form.autonomy_level} onChange={e => setForm({ ...form, autonomy_level: e.target.value as Guardrails['autonomy_level'] })}><option value="recommend">Recommend only</option><option value="assisted">Assisted</option><option value="auto">Automatic</option></select></label><button className="primary" disabled={busy} onClick={() => save(form)}>{busy ? 'Saving…' : 'Save guardrails'}</button><p className="form-note"><ShieldCheck/> Single-campaign increases remain capped at 25% per day in code.</p></section></> }
 
 export default function App() {
@@ -62,6 +111,6 @@ export default function App() {
   const decide = async (decision: 'approved' | 'rejected') => { const action = state.actions[0]; if (!action) return; await perform('decision', () => api.decide(action.id, decision), decision === 'approved' ? 'Creative approved and applied in simulation.' : 'Proposal rejected; no change was made.') }
   return <div className="app-shell"><aside className="sidebar"><button className="brand" onClick={() => { setPage('Overview'); setDetail(null) }}><Mark size={31}/><span>Journey <b>Edge</b></span></button><nav>{nav.map(({ page: item, icon: Icon }) => <button key={item} className={page === item && !detail ? 'active' : ''} onClick={() => { setPage(item); setDetail(null) }}><Icon/>{item}{item === 'Approvals' && state.actions[0]?.status === 'proposed' && <i>1</i>}</button>)}</nav><div className="sidebar-foot"><span className="live-dot"/> Simulation mode<small>External ad writes disabled</small></div></aside>
     <main className="workspace"><header className="topbar"><div><strong>Brew &amp; Bloom</strong><span>/ Marketing workspace</span></div><div className="top-actions"><button className="secondary small" disabled={!!busy} onClick={() => { setDetail(null); void perform('reset', api.reset, 'Demo reset and ready to run again.') }}><RotateCcw/> Reset</button><button className="primary" disabled={!!busy} onClick={() => void run()}>{busy === 'run' ? <LoaderCircle className="spin"/> : <Play/>}{busy === 'run' ? 'Analyzing…' : 'Run agent'}</button></div></header>
-      <div className="content">{detail ? <IssueDetail issue={detail} action={state.actions[0]} back={() => setDetail(null)} goApproval={() => { setDetail(null); setPage('Approvals') }}/> : page === 'Overview' ? <Overview state={state} openIssue={issue => { setDetail(issue); setPage('Issues') }}/> : page === 'Issues' ? <Issues state={state} select={setDetail}/> : page === 'Approvals' ? <Approvals state={state} busy={busy === 'decision'} decide={decide}/> : page === 'Campaigns' ? <Campaigns state={state}/> : page === 'Experiments' ? <Experiments state={state} busy={busy === 'simulate'} simulate={() => void perform('simulate', api.simulate, 'Next-week data injected. Recovery is measured and confirmed.')}/> : page === 'Chat' ? <><PageHeading eyebrow="READ-ONLY ASSISTANT" title="Ask the data" body="The chat can explain only evidence already loaded into the workflow."/><ChatPanel ask={api.chat}/></> : <GuardrailSettings state={state} busy={busy === 'guardrails'} save={async values => { setBusy('guardrails'); try { const guardrails = await api.saveGuardrails(values); setState({ ...state, guardrails }); setToast({ text: 'Guardrails saved.' }) } catch (error) { setToast({ text: error instanceof Error ? error.message : 'Save failed', error: true }) } finally { setBusy('') } }}/>}</div>
+      <div className="content">{detail ? <IssueDetail issue={detail} action={state.actions[0]} back={() => setDetail(null)} goApproval={() => { setDetail(null); setPage('Approvals') }}/> : page === 'Overview' ? <Overview state={state} openIssue={issue => { setDetail(issue); setPage('Issues') }}/> : page === 'Issues' ? <Issues state={state} select={setDetail}/> : page === 'Approvals' ? <Approvals state={state} busy={busy === 'decision'} decide={decide}/> : page === 'Campaigns' ? <Campaigns state={state}/> : page === 'Trends' ? <TrendsPage/> : page === 'Organic' ? <OrganicPage/> : page === 'Experiments' ? <Experiments state={state} busy={busy === 'simulate'} simulate={() => void perform('simulate', api.simulate, 'Next-week data injected. Recovery is measured and confirmed.')}/> : page === 'Chat' ? <><PageHeading eyebrow="READ-ONLY ASSISTANT" title="Ask the data" body="The chat can explain only evidence already loaded into the workflow."/><ChatPanel ask={api.chat}/></> : <GuardrailSettings state={state} busy={busy === 'guardrails'} save={async values => { setBusy('guardrails'); try { const guardrails = await api.saveGuardrails(values); setState({ ...state, guardrails }); setToast({ text: 'Guardrails saved.' }) } catch (error) { setToast({ text: error instanceof Error ? error.message : 'Save failed', error: true }) } finally { setBusy('') } }}/>}</div>
     </main>{toast && <div className={`toast ${toast.error ? 'error' : ''}`}>{toast.error ? <AlertTriangle/> : <CheckCircle2/>}{toast.text}</div>}</div>
 }

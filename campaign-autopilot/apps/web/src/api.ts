@@ -1,4 +1,4 @@
-import type { ChatAnswer, DemoState, Guardrails } from './types'
+import type { ChatAnswer, DemoState, GraphView, Guardrails, Organic, Trends } from './types'
 
 const agentUrl = import.meta.env.VITE_AGENT_URL ?? 'http://127.0.0.1:8000'
 
@@ -22,4 +22,7 @@ export const api = {
   reset: () => request<DemoState>('/api/reset', { method: 'POST' }),
   chat: (message: string) => request<ChatAnswer>('/api/chat', { method: 'POST', body: JSON.stringify({ message }) }),
   saveGuardrails: (guardrails: Guardrails) => request<Guardrails>('/api/guardrails', { method: 'PUT', body: JSON.stringify(guardrails) }),
+  trends: () => request<Trends>('/api/trends'),
+  organic: () => request<Organic>('/api/organic'),
+  graph: () => request<GraphView>('/api/graph'),
 }
