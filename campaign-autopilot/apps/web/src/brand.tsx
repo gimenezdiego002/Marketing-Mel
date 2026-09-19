@@ -1,10 +1,10 @@
-// Journey Edge brand primitives: the halftone mark, the customer logo strip, and decorative dot fields.
+// Journey Edge brand primitives, platform badges, and decorative dot fields.
+import { SiGoogle, SiMeta, SiShopify } from 'react-icons/si'
+import { FiMail } from 'react-icons/fi'
 
-// An 8x8 grid holding an up-right arrow as [col, row, ink]: a solid arrowhead bracket
-// over a shaft that dissolves into progressively finer halftone dots.
 const markCells: [number, number, number][] = [
   [4, 0, 1], [5, 0, 1], [6, 0, 1], [7, 0, 1], [7, 1, 1], [7, 2, 1], [7, 3, 1],
-  [6, 1, .82], [5, 2, .7], [4, 3, .58], [3, 4, .46], [2, 5, .35], [1, 6, .25], [0, 7, .16]
+  [6, 1, .82], [5, 2, .7], [4, 3, .58], [3, 4, .46], [2, 5, .35], [1, 6, .25], [0, 7, .16],
 ]
 
 export function Mark({ size = 30 }: { size?: number }) {
@@ -15,20 +15,19 @@ export function Mark({ size = 30 }: { size?: number }) {
   })}</svg>
 }
 
-// Decorative halftone fields; density and fade are handled by the mask in styles.css.
-export function DotField({ area }: { area: 'hero' | 'closing' | 'footer' }) { return <div className={`dotfield dotfield-${area}`} aria-hidden="true" /> }
+export function DotField({ area }: { area: 'hero' | 'closing' | 'footer' }) {
+  return <div className={`dotfield dotfield-${area}`} aria-hidden="true" />
+}
 
 export function LogoCloud() {
   return <section className="logo-cloud">
-    <p className="landing-eyebrow">BUILT FOR TEAMS ACQUIRING CUSTOMERS EVERY DAY</p>
-    <div className="logo-strip">
-      <span className="lc block"><i />MERIDIAN</span>
-      <span className="lc kinfolk">Kinfolk<em>&amp;</em>Co.</span>
-      <span className="lc mono">ATLAS·VERDE</span>
-      <span className="lc lower"><i />nordhaus</span>
-      <span className="lc tracked">SUMMIT GOODS</span>
-      <span className="lc orbit">Orbit<i /></span>
+    <p className="landing-eyebrow">THE TOOLS YOU ALREADY USE</p>
+    <div className="logo-strip integration-strip">
+      <span className="integration-logo shopify"><SiShopify /> Shopify</span>
+      <span className="integration-logo meta"><SiMeta /> Meta</span>
+      <span className="integration-logo google"><SiGoogle /> Google</span>
+      <span className="integration-logo klaviyo"><FiMail /> Email</span>
     </div>
-    <p className="logo-note">Illustrative brands, shown to set the scene for the demo scenario.</p>
+    <p className="logo-note">Shopify, ads, and email — in one place.</p>
   </section>
 }

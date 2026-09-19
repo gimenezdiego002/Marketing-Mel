@@ -1,28 +1,30 @@
-import type { ChatAnswer, DemoState, GraphView, Guardrails, Organic, Trends } from './types'
+import { issues as seedIssues, type Issue } from './data'
 
 const agentUrl = import.meta.env.VITE_AGENT_URL ?? 'http://127.0.0.1:8000'
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${agentUrl}${path}`, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+export async function getIssues(): Promise<Issue[]> {
+  const response = await fetch(`${agentUrl}/api/issues`)
+  if (!response.ok) throw new Error('Journey Edge agent is unavailable')
+  const rows = await response.json() as Array<Omit<Partial<Issue>, 'status' | 'severity'> & { id: string; status?: string; severity?: string }>
+  return rows.map(row => {
+    const fallback = seedIssues.find(issue => issue.id === row.id)
+    if (!fallback) throw new Error(`Unknown issue returned by the agent: ${row.id}`)
+    const status = row.status === 'Awaiting approval' ? 'Needs your OK' : row.status === 'Diagnosed' ? 'Explained' : row.status === 'Applied' ? 'Watching results' : fallback.status
+    const severity = row.severity === 'High' ? 'Fix first' : row.severity === 'Medium' ? 'Worth a look' : row.severity === 'Low' ? 'Good news' : fallback.severity
+    return { ...fallback, ...row, status, severity, evidence: fallback.evidence, action: fallback.action } as Issue
   })
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({ detail: 'Agent service is unavailable' }))
-    throw new Error(payload.detail ?? 'Agent service is unavailable')
-  }
-  return response.json() as Promise<T>
 }
 
-export const api = {
-  state: () => request<DemoState>('/api/state'),
-  run: () => request<DemoState>('/api/agent/run', { method: 'POST' }),
-  decide: (id: string, decision: 'approved' | 'rejected') => request<DemoState>(`/api/approvals/${id}`, { method: 'POST', body: JSON.stringify({ decision }) }),
-  simulate: () => request<DemoState>('/api/simulate-week', { method: 'POST' }),
-  reset: () => request<DemoState>('/api/reset', { method: 'POST' }),
-  chat: (message: string) => request<ChatAnswer>('/api/chat', { method: 'POST', body: JSON.stringify({ message }) }),
-  saveGuardrails: (guardrails: Guardrails) => request<Guardrails>('/api/guardrails', { method: 'PUT', body: JSON.stringify(guardrails) }),
-  trends: () => request<Trends>('/api/trends'),
-  organic: () => request<Organic>('/api/organic'),
-  graph: () => request<GraphView>('/api/graph'),
+export async function approveAction(issueId: string) {
+  const response = await fetch(`${agentUrl}/api/actions/${issueId}/approve`, { method: 'POST' })
+  if (!response.ok) throw new Error('The approval could not be recorded')
+  return response.json() as Promise<{ message: string }>
+}
+
+export async function saveSpendCap(maxDailySpend: number) {
+  const response = await fetch(`${agentUrl}/api/settings/guardrails`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ max_daily_spend: maxDailySpend }),
+  })
+  if (!response.ok) throw new Error('The spending limit could not be saved')
+  return response.json() as Promise<{ max_daily_spend: number }>
 }
