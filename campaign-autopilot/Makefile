@@ -1,5 +1,9 @@
 # Entry points for later build steps; Step 0 deliberately supplies stubs only.
-.PHONY: dev-web dev-agent seed demo test reset
+.PHONY: dev-web dev-agent seed demo test reset db-reset
+
+# Rebuild only the local database; requires Supabase CLI and running local services.
+db-reset:
+	supabase db reset --local
 
 dev-web:
 	@echo "TODO: start the Next.js web app in apps/web."
