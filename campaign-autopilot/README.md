@@ -1,80 +1,89 @@
-<!-- Project context and setup entry point for the Campaign Autopilot build. -->
 # Campaign Autopilot
 
 ## Context
 
 Campaign Autopilot is an agentic marketing system for small Shopify stores, built for a hackathon.
 
-It ingests ad campaign data (Meta, Google, email) plus Shopify revenue, detects problems (e.g. creative fatigue), explains WHY using combinations of metrics, proposes an action and new ad creative, asks a human to approve risky actions, applies the action, then measures the result when new data arrives and learns.
+It ingests campaign data and Shopify revenue, detects problems such as creative fatigue, explains the combined evidence, proposes an action and new creative, pauses for human approval, applies the approved action, and measures the result when new data arrives.
 
-### The core loop
+The loop is:
 
-One LangGraph graph:
-
+```text
 ingest → analyze → detect → diagnose → plan → generate → approve → act → measure → learn
+```
 
-### Stack
+The demo business is Brew & Bloom, a fictional Shopify coffee brand with four campaigns. `meta_prospecting` contains a reproducible fatigue pattern. Meta and Google writes and the next-week result remain explicitly simulated during the hackathon.
 
-- `apps/web`: Next.js 15 (App Router, TypeScript, Tailwind) dashboard.
-- `apps/agent`: Python 3.12, FastAPI, LangGraph, Pandas, OpenAI API (structured outputs).
-- `supabase/`: Postgres schema and migrations.
-- `data/`: seed CSVs and scenario JSONs.
-- `scripts/`: seed, demo, reset.
+The system follows four operating rules:
 
-### Non-negotiable rules
+1. Every displayed number comes from supplied data; the language layer cannot invent evidence.
+2. Connector writes pass code-level spend caps and approval policy.
+3. Decisions remain visible in the workflow activity trail.
+4. Shopify can use real Admin API reads while ad writes use the replaceable simulated connector.
 
-1. The LLM never invents numbers. Every metric in any narrative must come from a tool result or database row that is passed into the prompt.
-2. No write to any ad platform happens without passing guardrails (spend caps) AND the approval-tier check.
-3. Every agent decision is written to an `audit_log` with timestamp, rationale, and confidence.
-4. For the hackathon: Shopify reads are real (dev store). Meta/Google WRITES and "next week" performance are SIMULATED via `connectors/simulated.py`, behind the same interface as real connectors, so real ones can be dropped in later.
-5. Keep code simple and readable. Prefer small files with one responsibility. Add a docstring at the top of every file explaining its role in the loop (use an appropriate comment for non-code files).
-
-### Demo business
-
-"Brew & Bloom", a Shopify coffee brand, ~$40k/month revenue. These are fictional demo assumptions, not measured results. Four campaigns:
-
-- `meta_prospecting` — will show creative fatigue (the demo problem).
-- `meta_retargeting` — healthy, ROAS ~5.2, small budget (the scale opportunity).
-- `google_brand_search` — efficient, low volume.
-- `klaviyo_welcome_flow` — email; opens fine, clicks declining.
-
-### Working style
-
-Read `BUILD_PLAN.md` before implementing a step. Complete only the requested step, run its verification, and report files created, each file's purpose, verification output, and decisions needed. Never skip ahead or refactor earlier steps unless asked.
-
-## Layout
+## Project layout
 
 ```text
 campaign-autopilot/
-  BUILD_PLAN.md
-  README.md
-  .env.example
-  .gitignore
-  Makefile
-  apps/
-    web/
-    agent/
-  supabase/
-    migrations/
-  data/
-    seed/
-    scenarios/
-  scripts/
-  docs/
+  apps/web/               React and Vite dashboard
+  apps/agent/             FastAPI, analytics, connectors, guardrails, and LLM layer
+  supabase/migrations/    PostgreSQL schema
+  data/seed/              Deterministic campaign, order, and recovery fixtures
+  data/scenarios/         Alternate problem definitions
+  scripts/                Seed, reset, and demo runners
+  docs/                   Workflow, API access, and speaker notes
 ```
 
 ## How to run
 
-Step 0 supplies scaffolding only. Both app directories are empty; no service, database schema, or demo runs yet.
+Requirements: Python 3.12+, Node 20+, and Docker Desktop for local Supabase.
 
-1. Copy `.env.example` to `.env` and fill in the required keys when implementing subsequent steps.
-2. Keep `SIMULATION_MODE=true` for the hackathon.
-3. Later steps will supply installation and startup instructions.
-
-The Makefile exposes `dev-web`, `dev-agent`, `seed`, `demo`, `test`, and `reset`. All six currently print TODO messages only. GNU Make is needed to invoke them; on Windows, use a shell with Make installed, such as WSL.
-
-Empty directories exist locally but Git does not track them. After cloning this Step 0 skeleton, recreate them using PowerShell if needed:
+From a fresh checkout, copy the environment template and install dependencies:
 
 ```powershell
-'apps/web','apps/agent','supabase/migrations','data/seed','data/scenarios','scripts','docs' | ForEach-Object { New-Item -ItemType Directory -Force -Path $_ | Out-Null }
+Copy-Item .env.example .env
+npm install
+cd apps/web
+npm install
+cd ../..
+python -m pip install -e ".[test]"
+npx supabase start
+python scripts/seed_db.py
 ```
+
+Keep `SIMULATION_MODE=true`. Start the agent API:
+
+```powershell
+make dev-agent
+```
+
+In another terminal, start the React dashboard:
+
+```powershell
+make dev-web
+```
+
+Open `http://localhost:5173`. Click **Run agent**, open the detected issue, approve the creative, then open **Experiments** and click **Simulate next week**.
+
+Reset and rehearse the terminal workflow with:
+
+```powershell
+make reset
+make demo
+make test
+```
+
+On Windows, GNU Make is often installed as `mingw32-make` (for example with MSYS2); substitute that name, or run the commands from `Makefile` directly. The complete three-minute presentation is in `docs/demo-script.md`.
+
+## Web ↔ agent contract
+
+The dashboard talks to the FastAPI agent directly over HTTP; there is no Next.js server or
+browser-side Supabase access. `apps/web/src/types.ts` is the single source of truth for every
+payload and lists all seven endpoints; `apps/web/src/api.ts` is the only place that calls them.
+
+- Base URL comes from `VITE_AGENT_URL` (default `http://127.0.0.1:8000`). Vite reads the
+  repo-root `.env` via `envDir` in `apps/web/vite.config.ts`, so there is one env file, not two.
+- Every state-changing endpoint returns the whole `DemoState`, so the UI replaces its state from
+  one response instead of merging partial updates.
+- The agent accepts any `localhost`/`127.0.0.1` origin, so a Vite port fallback still works.
+- Verify the wired-up flow end to end with `cd apps/web && npm run smoke` while both services run.

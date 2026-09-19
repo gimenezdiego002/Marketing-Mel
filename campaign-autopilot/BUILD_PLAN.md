@@ -19,7 +19,7 @@ THE CORE LOOP (one LangGraph graph)
 ingest → analyze → detect → diagnose → plan → generate → approve → act → measure → learn
 
 STACK
-- apps/web: Next.js 15 (App Router, TypeScript, Tailwind) dashboard
+- apps/web: React (Vite, TypeScript, Tailwind) dashboard
 - apps/agent: Python 3.12, FastAPI, LangGraph, Pandas, OpenAI API (structured outputs)
 - supabase/: Postgres schema + migrations
 - data/: seed CSVs and scenario JSONs
