@@ -59,6 +59,31 @@ def test_shopify_missing_credentials_uses_seed_and_upserts(caplog: pytest.LogCap
     assert "seed/orders.csv" in caplog.text
 
 
+def test_shopify_exchanges_client_credentials_for_access_token() -> None:
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+        def json(self) -> dict[str, str]:
+            return {"access_token": "short-lived-token"}
+    class Client:
+        def post(self, url: str, data: dict[str, str]) -> Response:
+            assert url == "https://demo.myshopify.com/admin/oauth/access_token"
+            assert data == {
+                "grant_type": "client_credentials",
+                "client_id": "client-id",
+                "client_secret": "client-secret",
+            }
+            return Response()
+
+    connector = ShopifyConnector(
+        object(),
+        store_domain="demo.myshopify.com",
+        client_id="client-id",
+        client_secret="client-secret",
+    )
+    assert connector._request_access_token(Client()) == "short-lived-token"  # type: ignore[arg-type]
+
+
 @pytest.mark.parametrize("connector", [MetaConnector("token", "123"), GoogleAdsConnector("token", "oauth", "123")])
 def test_real_connectors_refuse_writes(connector: object) -> None:
     with pytest.raises(NotImplementedError, match="approval|App Review|approved"):

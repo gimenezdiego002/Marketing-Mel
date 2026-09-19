@@ -18,10 +18,21 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 class ShopifyConnector:
-    def __init__(self, database: Any, store_domain: str | None = None, admin_token: str | None = None):
+    def __init__(
+        self,
+        database: Any,
+        store_domain: str | None = None,
+        admin_token: str | None = None,
+        client_id: str | None = None,
+        client_secret: str | None = None,
+    ):
         self.database = database
         self.store_domain = store_domain or os.getenv("SHOPIFY_STORE_DOMAIN")
+        # admin_token remains injectable for tests and older stores. New Dev Dashboard
+        # apps use client credentials to request a short-lived token at runtime.
         self.admin_token = admin_token or os.getenv("SHOPIFY_ADMIN_TOKEN")
+        self.client_id = client_id or os.getenv("SHOPIFY_CLIENT_ID")
+        self.client_secret = client_secret or os.getenv("SHOPIFY_CLIENT_SECRET")
 
     @classmethod
     def from_env(cls) -> "ShopifyConnector":
@@ -32,7 +43,7 @@ class ShopifyConnector:
         return cls(create_client(url, key))
 
     def sync_orders(self, account_id: str) -> list[dict[str, Any]]:
-        if self.store_domain and self.admin_token:
+        if self.store_domain and (self.admin_token or (self.client_id and self.client_secret)):
             orders = self._fetch_live()
         else:
             LOGGER.warning("Shopify credentials are missing; loading data/seed/orders.csv instead of live orders")
@@ -55,8 +66,9 @@ class ShopifyConnector:
         endpoint = f"https://{self.store_domain}/admin/api/2026-07/graphql.json"
         rows, cursor = [], None
         with httpx.Client(timeout=30) as client:
+            access_token = self.admin_token or self._request_access_token(client)
             while True:
-                response = client.post(endpoint, headers={"X-Shopify-Access-Token": self.admin_token or ""},
+                response = client.post(endpoint, headers={"X-Shopify-Access-Token": access_token},
                                        json={"query": query, "variables": {"after": cursor, "filter": f"created_at:>={since} status:any"}})
                 response.raise_for_status()
                 body = response.json()
@@ -74,6 +86,24 @@ class ShopifyConnector:
                 if not orders["pageInfo"]["hasNextPage"]:
                     return rows
                 cursor = orders["pageInfo"]["endCursor"]
+
+    def _request_access_token(self, client: httpx.Client) -> str:
+        """Exchange Dev Dashboard credentials for Shopify's 24-hour token."""
+        if not self.client_id or not self.client_secret:
+            raise RuntimeError("SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET are required for live Shopify reads")
+        response = client.post(
+            f"https://{self.store_domain}/admin/oauth/access_token",
+            data={
+                "grant_type": "client_credentials",
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+            },
+        )
+        response.raise_for_status()
+        token = response.json().get("access_token")
+        if not token:
+            raise RuntimeError("Shopify authentication response did not contain an access token")
+        return str(token)
 
     @staticmethod
     def _fetch_seed() -> list[dict[str, Any]]:

@@ -3,14 +3,14 @@ project_id = "campaign-autopilot"
 
 [api]
 enabled = true
-port = 54321
+port = 54421
 schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
 
 [db]
-port = 54322
-shadow_port = 54320
+port = 54422
+shadow_port = 54420
 major_version = 17
 
 [db.migrations]
@@ -22,7 +22,7 @@ enabled = false
 
 [studio]
 enabled = true
-port = 54323
+port = 54423
 api_url = "http://127.0.0.1"
 
 [auth]
@@ -35,3 +35,9 @@ enable_signup = true
 [storage]
 enabled = true
 file_size_limit = "50MiB"
+
+[inbucket]
+enabled = true
+port = 54424
+smtp_port = 54425
+pop3_port = 54426
