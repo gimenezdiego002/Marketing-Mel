@@ -45,6 +45,8 @@ export type Action = {
   /** 'proposed' -> 'applied' | 'rejected' -> 'measured'. */
   status: string
   rationale: string; spend_change: number; decision: string; decision_reason: string; creative: Creative
+  guardrail_reason?: string
+  guardrail_passed?: boolean
 }
 
 export type Experiment = {
@@ -61,7 +63,7 @@ export type Guardrails = { max_daily_spend: number; max_reallocation_pct: number
 /** Arrays hold at most one element in the demo runtime, but are lists so real runs can grow. */
 export type DemoState = {
   thread_id: string
-  /** 'ready' | 'awaiting_approval' | 'applied' | 'rejected' | 'measured' | 'complete'. */
+  /** 'ready' | 'awaiting_approval' | 'applied' | 'rejected' | 'measured' | 'complete' | 'recommended' | 'blocked'. */
   phase: string
   overview: { shopify_revenue: number; ad_spend: number; blended_roas: number; open_issues: number; phase: string; thread_id: string }
   campaigns: Campaign[]; issues: Issue[]; actions: Action[]; experiments: Experiment[]; guardrails: Guardrails

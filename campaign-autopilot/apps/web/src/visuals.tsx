@@ -13,14 +13,14 @@ export const img = {
   mailer: '/visuals/sticker-mailer.png',
 }
 
-// Launch-film cast. `face` is the card portrait; `sheet` is the wide portrait/front/back
-// character sheet the video render is keyed from, kept alongside so the two never drift apart.
-export type CastMember = { id: string; face: string; sheet: string; role: string; note: string }
+// Launch-film cast. Cards show the face — that’s who the shopper is. Full-body
+// turnaround sheets stay in /visuals for the video render, not on the landing page.
+export type CastMember = { id: string; face: string; role: string; note: string }
 
 export const cast: CastMember[] = [
-  { id: '01', face: '/visuals/cast-01-face.png', sheet: '/visuals/cast-01.png', role: 'The first-time buyer', note: 'Sees the ad once, clicks it, and orders before the kettle boils.' },
-  { id: '02', face: '/visuals/cast-02-face.png', sheet: '/visuals/cast-02.png', role: 'The regular', note: 'Buys every month. Barely reads the ad any more — he already knows.' },
-  { id: '03', face: '/visuals/cast-03-face.png', sheet: '/visuals/cast-03.png', role: 'The one who scrolled past', note: 'Fourth time this week. His thumb keeps moving.' },
+  { id: '01', face: '/visuals/cast-01-face.png?v=2', role: 'The first-time buyer', note: 'Sees the ad once, clicks it, and orders before the kettle boils.' },
+  { id: '02', face: '/visuals/cast-02-face.png?v=2', role: 'The regular', note: 'Buys every month. Barely reads the ad any more — he already knows.' },
+  { id: '03', face: '/visuals/cast-03-face.png?v=2', role: 'The one who scrolled past', note: 'Fourth time this week. His thumb keeps moving.' },
 ]
 
 export function CastCard({ member }: { member: CastMember }) {
@@ -32,7 +32,6 @@ export function CastCard({ member }: { member: CastMember }) {
         <h3>{member.role}</h3>
         <p>{member.note}</p>
       </figcaption>
-      <img className="cast-sheet" src={member.sheet} alt="" />
     </figure>
   )
 }

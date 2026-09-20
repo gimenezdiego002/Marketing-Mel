@@ -8,6 +8,7 @@ the dashboard reads outside the loop.
 from __future__ import annotations
 
 import csv
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -18,10 +19,18 @@ from langgraph.types import Command
 
 from analytics.metrics import aggregate_metrics, safe_divide
 from graph import LOOP_NODES, build_loop
+from llm.client import maybe_client
 
 
 ROOT = Path(__file__).resolve().parents[2]
 SEED = ROOT / "data" / "seed"
+DEFAULT_GUARDRAILS = {
+    "max_daily_spend": 750,
+    "max_reallocation_pct": 15,
+    "auto_pause_threshold": 2.0,
+    "min_confidence": 0.7,
+    "autonomy_level": "assisted",
+}
 
 
 def _now() -> str:
@@ -42,19 +51,17 @@ class DemoRuntime:
         self.snapshots = pd.read_csv(SEED / "snapshots.csv")
         self.orders = pd.read_csv(SEED / "orders.csv")
         self.recovery = pd.read_csv(SEED / "week_after.csv")
-        self.guardrails = {
-            "max_daily_spend": 750,
-            "max_reallocation_pct": 15,
-            "auto_pause_threshold": 2.0,
-            "min_confidence": 0.7,
-            "autonomy_level": "assisted",
-        }
+        self.guardrails = dict(DEFAULT_GUARDRAILS)
         self.reset()
 
     # ------------------------------------------------------------------ graph
 
     def _build(self) -> Any:
-        return build_loop(self.campaign_rows, self.snapshots, self.recovery, len(self.orders))
+        # Graph tests and the API suite stay offline even if a key is in the environment.
+        kwargs: dict[str, Any] = {}
+        if os.getenv("PYTEST_CURRENT_TEST"):
+            kwargs["llm"] = None
+        return build_loop(self.campaign_rows, self.snapshots, self.recovery, len(self.orders), **kwargs)
 
     @property
     def _config(self) -> dict[str, Any]:
@@ -81,13 +88,18 @@ class DemoRuntime:
         return self._values().get("experiment")
 
     def reset(self) -> dict[str, Any]:
-        """Start a fresh graph thread and a clean simulated ad account."""
+        """Start a fresh graph thread and restore default demo guardrails."""
         self.thread_id = str(uuid4())
         self.loop = self._build()
+        self.guardrails = dict(DEFAULT_GUARDRAILS)
         self.base_events = [{"time": _now(), "event": "Demo reset", "detail": "Seed data restored; no external platform changed."}]
         return self.state()
 
     def run(self) -> dict[str, Any]:
+        """Always start a fresh thread so the current guardrail row is what the loop sees."""
+        self.thread_id = str(uuid4())
+        self.loop = self._build()
+        self.base_events = [{"time": _now(), "event": "Agent run", "detail": "Started a new loop with the current spend cap, confidence floor, and autonomy level."}]
         self.loop.invoke({"guardrails": dict(self.guardrails), "events": [], "visited": []}, self._config)
         return self.state()
 
@@ -225,25 +237,74 @@ class DemoRuntime:
     # ------------------------------------------------------------------ misc
 
     def chat(self, message: str) -> dict[str, Any]:
+        payload = {
+            "question": message,
+            "phase": self.phase,
+            "overview": self.overview(),
+            "guardrails": dict(self.guardrails),
+            "issue": self.issue,
+            "action": self.action,
+            "experiment": self.experiment,
+        }
+        client = maybe_client()
+        if client is not None:
+            try:
+                return client.chat(payload).model_dump()
+            except Exception:
+                pass
+        return self._offline_chat(message)
+
+    def _offline_chat(self, message: str) -> dict[str, Any]:
         text = message.lower()
-        issue, experiment = self.issue, self.experiment
-        if "why" in text or "fatigue" in text:
-            answer = issue["narrative"] if issue else "Run the agent first so I can answer from computed campaign evidence."
-            evidence = issue["evidence"] if issue else []
-        elif "spend" in text or "guardrail" in text:
-            answer = f"The daily spend cap is ${self.guardrails['max_daily_spend']:.0f}. The proposed creative changes spend by $0 and still requires approval."
-            evidence = [f"Maximum daily spend ${self.guardrails['max_daily_spend']:.0f}", "Proposed spend change $0"]
-        elif "organic" in text:
+        issue, action, experiment = self.issue, self.action, self.experiment
+        limitations = ["Answers are restricted to loaded campaign and guardrail data."]
+        if issue and any(word in text for word in ("why", "fatigue", "landing", "diagnos", "what happened", "slow")):
+            return {"answer": issue["narrative"], "evidence_cited": list(issue.get("evidence") or []), "limitations": limitations}
+        if "spend" in text or "guardrail" in text or "allow" in text or "limit" in text:
+            cap = self.guardrails["max_daily_spend"]
+            extra = 0 if not action else action.get("spend_change", 0)
+            answer = (
+                f"The daily spend cap is ${cap:.0f}. "
+                f"The current proposal changes spend by ${extra:.0f}. "
+                f"Autonomy is {self.guardrails['autonomy_level']} and minimum confidence is {self.guardrails['min_confidence']:.2f}."
+            )
+            return {"answer": answer, "evidence_cited": [f"Maximum daily spend ${cap:.0f}", f"Proposed spend change ${extra:.0f}"], "limitations": limitations}
+        if "organic" in text:
             organic = self.organic()
-            answer = (f"Organic and direct orders account for ${organic['organic_revenue']:,.0f} of "
-                      f"${organic['total_revenue']:,.0f} in Shopify revenue, or {organic['organic_share']:.1f}%.")
+            answer = (
+                f"Organic and direct orders account for ${organic['organic_revenue']:,.0f} of "
+                f"${organic['total_revenue']:,.0f} in Shopify revenue, or {organic['organic_share']:.1f}%."
+            )
             evidence = [f"{organic['organic_orders']} organic orders", f"Organic AOV ${organic['organic_aov']:.2f}"]
-        elif "result" in text or "recover" in text:
-            answer = "The experiment has not been measured yet." if not experiment else f"The recovery is confirmed: CPA moved from ${experiment['before']['cpa']:.2f} to ${experiment['after']['cpa']:.2f}."
-            evidence = [] if not experiment else [f"CPA {experiment['changes']['cpa'] * 100:+.1f}%", "Seven-day recovery window"]
-        else:
-            answer, evidence = "I can explain the fatigue diagnosis, guardrails, spend, organic revenue, or measured recovery using the current demo data.", []
-        return {"answer": answer, "evidence_cited": evidence, "limitations": ["Answers are restricted to loaded campaign and guardrail data."]}
+            return {"answer": answer, "evidence_cited": evidence, "limitations": limitations}
+        if "result" in text or "recover" in text or "experiment" in text:
+            if not experiment:
+                return {"answer": "The experiment has not been measured yet. Approve an action, then simulate the next week.", "evidence_cited": [], "limitations": limitations}
+            answer = (
+                f"The recovery is {experiment['verdict']}: CPA moved from "
+                f"${experiment['before']['cpa']:.2f} to ${experiment['after']['cpa']:.2f}."
+            )
+            evidence = [f"CPA {experiment['changes']['cpa'] * 100:+.1f}%", "Seven-day recovery window"]
+            return {"answer": answer, "evidence_cited": evidence, "limitations": limitations}
+        if "earned" in text or "roas" in text:
+            overview = self.overview()
+            answer = (
+                f"For every $1 spent on ads, about ${overview['blended_roas']:.2f} came back as attributed revenue. "
+                f"Store sales were ${overview['shopify_revenue']:,.0f} and ad spend was ${overview['ad_spend']:,.0f}."
+            )
+            evidence = [f"Blended ROAS {overview['blended_roas']}", f"Shopify revenue ${overview['shopify_revenue']:.0f}"]
+            return {"answer": answer, "evidence_cited": evidence, "limitations": limitations}
+        if not issue:
+            return {
+                "answer": "Run the agent first so I can answer from computed campaign evidence. I can then explain the diagnosis, spend cap, organic revenue, or measured result.",
+                "evidence_cited": [],
+                "limitations": limitations,
+            }
+        return {
+            "answer": issue["narrative"],
+            "evidence_cited": list(issue.get("evidence") or []),
+            "limitations": limitations,
+        }
 
     def update_guardrails(self, values: dict[str, Any]) -> dict[str, Any]:
         for field in self.guardrails:

@@ -76,3 +76,53 @@ def test_graph_view_reports_the_loop_and_its_two_interrupts() -> None:
     paused = client.get("/api/graph").json()
     assert paused["visited"] == ["ingest", "analyze", "detect", "diagnose", "plan", "generate"]
     assert next(node["status"] for node in paused["nodes"] if node["name"] == "approve") == "pending"
+
+
+def _defaults(**overrides: object) -> dict[str, object]:
+    values: dict[str, object] = {
+        "max_daily_spend": 750, "max_reallocation_pct": 15, "auto_pause_threshold": 2.0,
+        "min_confidence": 0.7, "autonomy_level": "assisted",
+    }
+    values.update(overrides)
+    return values
+
+
+def test_recommend_autonomy_stops_before_a_write() -> None:
+    client = TestClient(app)
+    client.post("/api/reset")
+    client.put("/api/guardrails", json=_defaults(autonomy_level="recommend"))
+    state = client.post("/api/agent/run").json()
+    assert state["phase"] == "recommended"
+    assert state["actions"][0]["status"] == "recommended"
+    assert state["actions"][0]["decision"] == "recommend_only"
+    assert client.post("/api/simulate-week").status_code == 409
+
+
+def test_spend_cap_below_current_budgets_blocks_the_write() -> None:
+    client = TestClient(app)
+    client.post("/api/reset")
+    client.put("/api/guardrails", json=_defaults(max_daily_spend=100))
+    state = client.post("/api/agent/run").json()
+    assert state["phase"] == "blocked"
+    assert state["actions"][0]["status"] == "blocked"
+    assert state["actions"][0]["guardrail_passed"] is False
+    assert "100" in state["actions"][0]["guardrail_reason"]
+    assert client.post("/api/simulate-week").status_code == 409
+
+
+def test_high_confidence_floor_downgrades_to_a_recommendation() -> None:
+    client = TestClient(app)
+    client.post("/api/reset")
+    client.put("/api/guardrails", json=_defaults(min_confidence=0.95))
+    state = client.post("/api/agent/run").json()
+    assert state["actions"][0]["decision"] == "recommend_only"
+    assert state["phase"] == "recommended"
+
+
+def test_auto_autonomy_still_pauses_for_high_risk_creative() -> None:
+    client = TestClient(app)
+    client.post("/api/reset")
+    client.put("/api/guardrails", json=_defaults(autonomy_level="auto"))
+    state = client.post("/api/agent/run").json()
+    assert state["phase"] == "awaiting_approval"
+    assert state["actions"][0]["status"] == "proposed"

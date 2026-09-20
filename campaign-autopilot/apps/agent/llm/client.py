@@ -97,6 +97,13 @@ def _prompt(name: str) -> str:
     return (PROMPTS / f"{name}.md").read_text(encoding="utf-8")
 
 
+def maybe_client() -> LLMClient | None:
+    """Return a live client only when a key is configured, so offline tests stay offline."""
+    if not os.getenv("OPENAI_API_KEY"):
+        return None
+    return LLMClient()
+
+
 class LLMClient:
     def __init__(self, client: OpenAI | None = None, model: str | None = None,
                  sleep: Callable[[float], None] = time.sleep):

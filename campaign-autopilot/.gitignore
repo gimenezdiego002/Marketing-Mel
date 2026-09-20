@@ -35,3 +35,6 @@ supabase/.temp/
 supabase/.branches/
 .DS_Store
 Thumbs.db
+
+# Local Chrome walkthrough profile (cookies, cache, extensions)
+apps/web/walkthrough/chrome-profile/

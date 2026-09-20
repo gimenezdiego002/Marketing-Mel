@@ -45,7 +45,7 @@ def _loop(connector: Any, only: str | None = None, **overrides: Any):
     if only:
         campaigns = [row for row in campaigns if row["external_id"] == only]
         snapshots = snapshots[snapshots["campaign_external_id"] == only]
-    loop = build_loop(campaigns, snapshots, recovery, 1300, connector=connector)
+    loop = build_loop(campaigns, snapshots, recovery, 1300, connector=connector, llm=None)
     guardrails = {**BASE_GUARDRAILS, **overrides}
     return loop, {"guardrails": guardrails, "events": [], "visited": []}
 
@@ -134,3 +134,49 @@ def test_healthy_account_ends_without_an_issue(config: dict[str, Any]) -> None:
     assert values["issue"] is None
     assert values["visited"] == ["ingest", "analyze", "detect"]
     assert spy.writes == []
+
+
+def test_landing_page_diagnosis_does_not_say_creative_fatigue(config: dict[str, Any]) -> None:
+    spy = SpyConnector()
+    rows = [{"external_id": "lp_test", "name": "Landing Test", "platform": "meta", "daily_budget": "50"}]
+    baseline = {"impressions": 10000, "clicks": 200, "spend": 110, "conversions": 6, "revenue": 340, "reach": 5000}
+    recent = {"impressions": 10000, "clicks": 200, "spend": 110, "conversions": 3.6, "revenue": 205, "reach": 5000}
+    snapshots = pd.DataFrame([
+        {"date": f"2026-02-{day + 1:02d}", "campaign_external_id": "lp_test", **(recent if day >= 14 else baseline)}
+        for day in range(21)
+    ])
+    loop = build_loop(rows, snapshots, snapshots.tail(7).copy(), 0, connector=spy, llm=None)
+    loop.invoke({"guardrails": BASE_GUARDRAILS, "events": [], "visited": []}, config)
+    issue = loop.get_state(config).values["issue"]
+    assert issue["type"] == "landing_page_or_offer"
+    text = issue["narrative"].lower()
+    assert "creative fatigue" not in text
+    assert "landing page" in text
+    assert loop.get_state(config).values["action"]["creative"]["variant_label"] == "Clearer offer"
+
+
+def test_generate_calls_injected_language_layer(config: dict[str, Any]) -> None:
+    class RecordingLLM:
+        def __init__(self) -> None:
+            self.diagnose_calls: list[dict[str, Any]] = []
+            self.create_calls: list[dict[str, Any]] = []
+
+        def diagnose(self, payload: dict[str, Any]) -> Any:
+            self.diagnose_calls.append(payload)
+            raise RuntimeError("force fallback")
+
+        def create(self, payload: dict[str, Any]) -> Any:
+            self.create_calls.append(payload)
+            raise RuntimeError("force fallback")
+
+    spy = SpyConnector()
+    llm = RecordingLLM()
+    campaigns, snapshots, recovery = _seed()
+    loop = build_loop(campaigns, snapshots, recovery, 1300, connector=spy, llm=llm)
+    loop.invoke({"guardrails": BASE_GUARDRAILS, "events": [], "visited": []}, config)
+    values = loop.get_state(config).values
+    assert llm.diagnose_calls and llm.diagnose_calls[0]["likely_cause"] == "creative_fatigue"
+    assert llm.create_calls and llm.create_calls[0]["likely_cause"] == "creative_fatigue"
+    assert values["issue"]["type"] == "creative_fatigue"
+    assert "creative fatigue" in values["issue"]["narrative"].lower()
+    assert values["action"]["creative"]["variant_label"] == "Fresh ritual"
